@@ -311,42 +311,46 @@ def filter_interface_residue(input_info):
 
 #get the PROTAC conformations
 def getConformers(file_rec_lig_sdf, file_warhead_sdf, protac_smi, file_docked, file_out):
-    e3_ligand = Chem.SDMolSupplier(file_rec_lig_sdf)[0]
-    warhead = Chem.SDMolSupplier(file_warhead_sdf)[0]
-    docked_head = Chem.SDMolSupplier(file_docked)[0]
-    with open(protac_smi,'rb') as protac_smi_input:
-        protac_smi = protac_smi_input.read().splitlines()[0]
-    protac = Chem.MolFromSmiles(protac_smi)
-    Chem.AddHs(protac)
-    Chem.AddHs(docked_head)
-    docked_e3 = docked_head.GetSubstructMatch(e3_ligand)
-    docked_warhead = docked_head.GetSubstructMatch(warhead)
-    protac_e3 = protac.GetSubstructMatch(e3_ligand)
-    protac_warhead = protac.GetSubstructMatch(warhead)
-    #print docked_e3
-    #print docked_warhead
-    #print protac_e3
-    #print protac_warhead
-    protac_align_id = list(protac_e3)+list(protac_warhead)
-    docked_align_id = list(docked_e3)+list(docked_warhead)
     rmsList = []
-    if not (len(docked_e3) == 0 or len(docked_warhead) == 0):
-        cmap = {protac_e3[j]: docked_head.GetConformer().GetAtomPosition(docked_e3[j]) for j in range(len(docked_e3))}
-        cmap.update({protac_warhead[j]: docked_head.GetConformer().GetAtomPosition(docked_warhead[j]) for j in range(len(docked_warhead))})
-        cids = AllChem.EmbedMultipleConfs(protac, numConfs=100, coordMap=cmap, maxAttempts=1000, numThreads=1)
-        if len(cids) > 0:
-            writer = Chem.SDWriter(file_out)
-            for i in range(len(cids)):
-                rms = rdMolAlign.AlignMol(protac, docked_head, prbCid=i,atomMap=zip(protac_align_id,docked_align_id))
-                #rms_e3 = rdMolAlign.AlignMol(protac, docked_e3, prbCid=i,atomMap=zip(list(protac_e3),list(docked_e3)))
-                #rms_warhead = rdMolAlign.AlignMol(protac, docked_warhead, prbCid=i,atomMap=zip(list(protac_warhead),list(docked_warhead)))
-                #print rms
-                if rms < 0.5:
-                #if rms_e3 < 0.5 and rms_warhead < 0.5:
-                    rmsList.append(rms)
-                    writer.write(protac, confId=i)
-                #rmsList.append(rms)
-                #writer.write(protac, confId=i)
-    #content = '%s %s' % (file_docked, len(rmsList))
-    #print '%s %s' % (file_docked, len(rmsList))
-    return len(rmsList)
+    #rdkit might meet some errors for some ligands
+    try:
+        e3_ligand = Chem.SDMolSupplier(file_rec_lig_sdf)[0]
+        warhead = Chem.SDMolSupplier(file_warhead_sdf)[0]
+        docked_head = Chem.SDMolSupplier(file_docked)[0]
+        with open(protac_smi,'rb') as protac_smi_input:
+            protac_smi = protac_smi_input.read().splitlines()[0]
+        protac = Chem.MolFromSmiles(protac_smi)
+        Chem.AddHs(protac)
+        Chem.AddHs(docked_head)
+        docked_e3 = docked_head.GetSubstructMatch(e3_ligand)
+        docked_warhead = docked_head.GetSubstructMatch(warhead)
+        protac_e3 = protac.GetSubstructMatch(e3_ligand)
+        protac_warhead = protac.GetSubstructMatch(warhead)
+        #print docked_e3
+        #print docked_warhead
+        #print protac_e3
+        #print protac_warhead
+        protac_align_id = list(protac_e3)+list(protac_warhead)
+        docked_align_id = list(docked_e3)+list(docked_warhead)
+        if not (len(docked_e3) == 0 or len(docked_warhead) == 0):
+            cmap = {protac_e3[j]: docked_head.GetConformer().GetAtomPosition(docked_e3[j]) for j in range(len(docked_e3))}
+            cmap.update({protac_warhead[j]: docked_head.GetConformer().GetAtomPosition(docked_warhead[j]) for j in range(len(docked_warhead))})
+            cids = AllChem.EmbedMultipleConfs(protac, numConfs=100, coordMap=cmap, maxAttempts=1000, numThreads=1)
+            if len(cids) > 0:
+                writer = Chem.SDWriter(file_out)
+                for i in range(len(cids)):
+                    rms = rdMolAlign.AlignMol(protac, docked_head, prbCid=i,atomMap=zip(protac_align_id,docked_align_id))
+                    #rms_e3 = rdMolAlign.AlignMol(protac, docked_e3, prbCid=i,atomMap=zip(list(protac_e3),list(docked_e3)))
+                    #rms_warhead = rdMolAlign.AlignMol(protac, docked_warhead, prbCid=i,atomMap=zip(list(protac_warhead),list(docked_warhead)))
+                    #print rms
+                    if rms < 0.5:
+                    #if rms_e3 < 0.5 and rms_warhead < 0.5:
+                        rmsList.append(rms)
+                        writer.write(protac, confId=i)
+                    #rmsList.append(rms)
+                    #writer.write(protac, confId=i)
+        #content = '%s %s' % (file_docked, len(rmsList))
+        #print '%s %s' % (file_docked, len(rmsList))
+        return len(rmsList)
+    except:
+        return len(rmsList)

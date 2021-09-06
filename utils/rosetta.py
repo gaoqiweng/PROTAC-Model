@@ -215,6 +215,7 @@ def rosetta(cpu, lig_locate_num):
     if os.path.exists(filepath_rosetta_results_all) == False:
        os.makedirs(filepath_rosetta_results_all)
     os.system('cp %s/model_merge_*.pdb %s %s' % (filepath_cluster, results_rosetta, filepath_rosetta_results_all))
+    os.system('rm target_lig_pre.* target_lig.*_*.pdb target_lig.*_*.sdf protac_*_*.mol2 *.pdbqt model_nolig.*.pdb')
 
 #get the topN conformations from each ensemble of Rosetta and merge the frodock result
 def rosetta_cluster_topN(input_voro_score, input_frodock_score, output_file, number):
@@ -252,7 +253,6 @@ def rosetta_cluster_topN(input_voro_score, input_frodock_score, output_file, num
     with open(output_file_temp, 'wb') as file_out:
         file_out.write(content)
     os.system('sort -n -k2 %s | nl > %s ' % (output_file_temp, output_file))
-
 
 #get the interface residue
 def interface_rosetta(rec_site, lig_site, pdb, rec_chain_list, lig_chain_list):
@@ -367,7 +367,6 @@ def extract_frodock_result(voromqa_input, cluster_input, model_input):
 #generate docking parametes for rosetta
 def generate_rosetta_para(file_out):
     content = '-in:file:extra_res_fa rec_lig.params\n'
-    #content += '-nstruct 400\n'
     content += '-nstruct 400\n'
     content += '-use_input_sc\n'
     content += '-load_PDB_components false\n'
@@ -411,7 +410,6 @@ class Filtering_queue:
         self.filepath_rec_lig_2 = filepath_rec_lig_2
         self.filepath_vina_1 = '%s/vina' % filepath_rec_lig_1
         self.filepath_vina_2 = '%s/vina' % filepath_rec_lig_2
-
 
     def producer(self,in_q):
         while in_q.full() is False:
