@@ -32,7 +32,7 @@ optional arguments:
                         submit the smaller protein as the target.
   -site X,Y,Z, --input-docking-site X,Y,Z
                         The docking site in the receptor for protein-protein
-                        docking. e.g. 68.07,46.19,48.61
+                        docking. e.g. -site=-35.73,13.75,-27.92
   -ismi <string>, --input-protac-smi <string>
                         Smiles file of PROTAC.
   -o <string>, --output-filepath <string>
