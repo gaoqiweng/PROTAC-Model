@@ -73,4 +73,3 @@ With RosettaDock-based refinement:
 
 python main.py -irec example_2/receptor.pdb -ilig example_2/target.pdb -site=68.02,46.63,48.63 -ismi example_2/protac.smi -o docking_2 -cpu 28 -ie3lig1 example_2/rec_lig_1.sdf -ie3lig2 example_2/rec_lig_2.sdf refine
 
-Warning: The chain id of receptor and target should be different. The receptor and target must only have one chain.
