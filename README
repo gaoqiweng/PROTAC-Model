@@ -1,0 +1,74 @@
+Installation requirements for PROTAC-MODEL:
+
+1. Python 2.7
+
+2. Install RDKit, ADFRsuite(https://ccsb.scripps.edu/adfr/downloads/), Vina (http://vina.scripps.edu/download.html), Voromqa(https://github.com/kliment-olechnovic/voronota), FCC (https://github.com/haddocking/fcc).
+
+3. FRODOCK(https://chaconlab.org/modeling/frodock/frodock-donwload). This url is for the v3.12. If you want to download the v2.1, I think you can send an e-mail to the author.
+
+4. Rosetta (https://www.rosettacommons.org/software/license-and-download). For improving the calculation efficiency, we highly recommend you to install MPI. Our scripts are also compiled based on MPI.
+
+5. Set the following environment parameters: 
+	export ADFRSUITE=/Path/to/ADFRSUITE/
+	export FRODOCK=/Path/to/FRODOCK/
+	export VINA=/Path/to/VINA/
+	export VOROMQA=/Path/to/VOROMQA/
+	export FCC=/Path/to/FCC/
+	export ROSETTA=/Path/to/ROSETTA/
+
+usage: main.py [-h] -irec <string> -ilig <string> -site X,Y,Z -ismi <string>
+               -o <string> [-cpu <int>] [-ie3lig1 <string>]
+               [-ie3lig2 <string>] [-refine]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -irec <string>, --input-receptor-pdb <string>
+                        PDB file of receptor protein should include the small
+                        molecular binder and exclude other heteroatoms. Please
+                        submit the larger protein as the receptor.
+  -ilig <string>, --input-target-pdb <string>
+                        PDB file of target protein should include the small
+                        molecular binder and exclude other heteroatoms. Please
+                        submit the smaller protein as the target.
+  -site X,Y,Z, --input-docking-site X,Y,Z
+                        The docking site in the receptor for protein-protein
+                        docking. e.g. 68.07,46.19,48.61
+  -ismi <string>, --input-protac-smi <string>
+                        Smiles file of PROTAC.
+  -o <string>, --output-filepath <string>
+                        The filepath for storing files.
+  -cpu <int>            Number of cpu to calculate. Default value: 1
+  -ie3lig1 <string>, --input-e3-ligand-sdf1 <string>
+                        First sdf file of the e3 ligand which contains two
+                        possible locations for the attachment of the atoms,
+                        e.g. thalidomide.
+  -ie3lig2 <string>, --input-e3-ligand-sdf2 <string>
+                        Second sdf file of the e3 ligand which contains two
+                        possible locations for the attachment of the atoms,
+                        e.g. thalidomide.
+  -refine, --rosettadock-refinement
+                        Use the RosettaDock-based refinement to improve the
+                        prediction performance. But it will cost much more
+                        time.
+
+Tutorials:
+
+Example 1:
+
+For FRODOCK only:
+
+python main.py -irec example_1/receptor.pdb -ilig example_1/target.pdb -site=-35.73,13.75,-27.92 -ismi example_1/protac.smi -o docking_1 -cpu 28
+
+With RosettaDock-based refinement:
+
+python main.py -irec example_1/receptor.pdb -ilig example_1/target.pdb -site=-35.73,13.75,-27.92 -ismi example_1/protac.smi -o docking_1 -cpu 28 -refine
+
+Example 2:
+
+For FRODOCK only:
+
+python main.py -irec example_2/receptor.pdb -ilig example_2/target.pdb -site=68.02,46.63,48.63 -ismi example_2/protac.smi -o docking_2 -cpu 28 -ie3lig1 example_2/rec_lig_1.sdf -ie3lig2 example_2/rec_lig_2.sdf
+
+With RosettaDock-based refinement:
+
+python main.py -irec example_2/receptor.pdb -ilig example_2/target.pdb -site=68.02,46.63,48.63 -ismi example_2/protac.smi -o docking_2 -cpu 28 -ie3lig1 example_2/rec_lig_1.sdf -ie3lig2 example_2/rec_lig_2.sdf refine
