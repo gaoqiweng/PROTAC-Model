@@ -87,6 +87,59 @@ def alter_chain(file_input_pdb, file_out_pdb, chain_id):
     with open(file_out_pdb, 'wb') as file_out:
         file_out.write(content)
 
+#alter the chain id of protein in order
+def alter_pro_chain(rec_input, target_input, rec_out, target_out):
+    chain_list = []
+    for i in range(65, 88): #exclude X,Y which is the id for small molecules
+        chain_list.append('%c' % i)
+    for i in range(97,123):
+        chain_list.append('%c' % i)
+    with open(rec_input, 'rb') as file_in:
+        rec_lines = file_in.read().splitlines()
+    with open(target_input, 'rb') as file_in:
+        target_lines = file_in.read().splitlines()
+    j = 0
+    flag_model = 0
+    first_chain_id = ''
+    content_rec = ''
+    content_target = ''
+    for rec_line in rec_lines:
+        if rec_line[:5] == 'MODEL':  # Only keep the first model
+            if flag_model == 0:
+                flag_model = 1
+            else:
+                break
+        if rec_line[0:4] == 'ATOM':
+            chain_id = rec_line[21]
+            if chain_id != first_chain_id:
+                first_chain_id = chain_id
+                new_chain_id = chain_list[j]
+                j += 1
+            content_rec += rec_line[:21] + new_chain_id + rec_line[22:] + '\n'
+        else:
+            content_rec += rec_line + '\n'
+    first_chain_id = ''
+    for target_line in target_lines:
+        if target_line[:5] == 'MODEL':  # Only keep the first model
+            if flag_model == 0:
+                flag_model = 1
+            else:
+                break
+        if target_line[0:4] == 'ATOM':
+            chain_id = target_line[21]
+            if chain_id != first_chain_id:
+                first_chain_id = chain_id
+                new_chain_id = chain_list[j]
+                j += 1
+            content_target += target_line[:21] + new_chain_id + target_line[22:] + '\n'
+        else:
+            content_target += target_line + '\n'
+    with open(rec_out, 'wb') as file_out:
+        file_out.write(content_rec)
+    with open(target_out, 'wb') as file_out:
+        file_out.write(content_target)
+
+#get the chain id
 def get_chain_id(file_input_pdb):
     with open(file_input_pdb, 'rb') as file_in:
         pdb_lines = file_in.read().splitlines()

@@ -5,7 +5,7 @@ import os
 import argparse
 import utils.frodock as fro
 import utils.rosetta as ros
-
+import utils.preprocess as pre
 
 def parse_args():
     """Parses arguments from cmd"""
@@ -66,8 +66,9 @@ def main():
         os.system('cp %s %s/rec_lig_1.sdf' % (filepath_e3sdf_1, filepath_frodock))
         os.system('cp %s %s/rec_lig_2.sdf' % (filepath_e3sdf_2, filepath_frodock))
         lig_locate_num = 2
-    os.system('cp %s %s/receptor.pdb' % (filepath_rec, filepath_frodock))
-    os.system('cp %s %s/target.pdb' % (filepath_lig, filepath_frodock))
+    #alter the chain id of proteins to avoid the same chain id between receptor and target for rosetta docking
+    pre.alter_pro_chain(filepath_rec, filepath_lig,
+                        '%s/receptor.pdb' % filepath_frodock, '%s/target.pdb' % filepath_frodock)
     os.system('cp %s %s/protac.smi' % (filepath_smiles, filepath_frodock))
     os.chdir(filepath_frodock) #working directory is in filepath_frodock
 
@@ -76,12 +77,12 @@ def main():
     fro.filter_frodock(cpu, lig_locate_num)
 
     #Rosetta docking
-    filepath_rosetta = 'rosetta'
-    if refine:
-        if os.path.exists('../%s' % filepath_rosetta) == False:
-            os.makedirs('../%s' % filepath_rosetta)
-        os.chdir('../%s' % filepath_rosetta)
-        ros.rosetta(cpu, lig_locate_num)
+    #filepath_rosetta = 'rosetta'
+    #if refine:
+    #    if os.path.exists('../%s' % filepath_rosetta) == False:
+    #        os.makedirs('../%s' % filepath_rosetta)
+    #    os.chdir('../%s' % filepath_rosetta)
+    #    ros.rosetta(cpu, lig_locate_num)
 
 if __name__ == '__main__':
     main()
