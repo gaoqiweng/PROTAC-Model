@@ -77,12 +77,12 @@ def main():
     fro.filter_frodock(cpu, lig_locate_num)
 
     #Rosetta docking
-    #filepath_rosetta = 'rosetta'
-    #if refine:
-    #    if os.path.exists('../%s' % filepath_rosetta) == False:
-    #        os.makedirs('../%s' % filepath_rosetta)
-    #    os.chdir('../%s' % filepath_rosetta)
-    #    ros.rosetta(cpu, lig_locate_num)
+    filepath_rosetta = 'rosetta'
+    if refine:
+        if os.path.exists('../%s' % filepath_rosetta) == False:
+            os.makedirs('../%s' % filepath_rosetta)
+        os.chdir('../%s' % filepath_rosetta)
+        ros.rosetta(cpu, lig_locate_num)
 
 if __name__ == '__main__':
     main()
