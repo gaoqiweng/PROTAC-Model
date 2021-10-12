@@ -119,6 +119,7 @@ def alter_pro_chain(rec_input, target_input, rec_out, target_out):
         else:
             content_rec += rec_line + '\n'
     first_chain_id = ''
+    flag_model = 0
     for target_line in target_lines:
         if target_line[:5] == 'MODEL':  # Only keep the first model
             if flag_model == 0:
@@ -201,14 +202,9 @@ def extract_top3_cluster(cluster_input, top1_intput, result_input, file_output):
         cluster_lines = cluster_file.read().splitlines()
     with open(top1_intput, 'rb') as top1_file:
         top1_lines = top1_file.read().splitlines()
-    k = 1
     top1_list = []
     for top1_line in top1_lines:
-        if k <=50:
-            top1_list.append(int(top1_line))
-            k += 1
-        else:
-            break
+        top1_list.append(int(top1_line))
     cluster_dict = {}
     all_top3_list = []
     for cluster_line in cluster_lines:
