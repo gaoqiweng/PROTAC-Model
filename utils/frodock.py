@@ -57,7 +57,7 @@ def frodock(site):
         print "frodockcluster is not found"
         sys.exit()
     os.system('echo STAGE-6 Clustering and visualization of predictions')
-    os.system(frodockcluster + ' dock.dat target.pdb -o clust_dock_4.dat -d 4')
+    os.system(frodockcluster + ' dock.dat target.pdb -o clust_dock_4.dat -d 4 --nc 100000')
 
     frodockview_intel = '%s/bin/frodockview' % FRODOCK
     frodockview_gcc = '%s/bin/frodockview_gcc' % FRODOCK
@@ -204,6 +204,8 @@ def filter_frodock(cpu, lig_locate_num):
     pre.extract_top3_cluster('%s/cluster_5_3_model_process' % filepath_cluster,
                              '%s/cluster_5_3_results_top1' % filepath_cluster, results_frodock,
                              '%s/%s' % (filepath_frodock_results, cluster_top3))
+    cp_cluster='cp %s/cluster_5_3_model_process %s/cluster_all' % (filepath_cluster, filepath_frodock_results)
+    os.system(cp_cluster)
     with open('%s/%s' % (filepath_frodock_results, cluster_top3), 'rb') as file:
         cluster_lines = file.read().splitlines()
     for cluster_line in cluster_lines:

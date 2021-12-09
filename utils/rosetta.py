@@ -204,6 +204,8 @@ def rosetta(cpu, lig_locate_num):
     pre.extract_top3_cluster('%s/cluster_5_3_model_process' % filepath_cluster,
                             '%s/cluster_5_3_results_top1' % filepath_cluster, results_rosetta,
                             '%s/%s' % (filepath_rosetta_results, cluster_top3))
+    cp_cluster='cp %s/cluster_5_3_model_process %s/cluster_all' % (filepath_cluster, filepath_rosetta_results)
+    os.system(cp_cluster)
     with open('%s/%s' % (filepath_rosetta_results, cluster_top3), 'rb') as file:
        cluster_lines = file.read().splitlines()
     for cluster_line in cluster_lines:
