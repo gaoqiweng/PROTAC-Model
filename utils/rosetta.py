@@ -21,7 +21,7 @@ def rosetta(cpu, lig_locate_num):
     frodock_voromqa = '%s/results_voromqa_interface_rank' % filepath_frodock
     frodock_cluster = '%s/cluster/cluster_5_3_results_top1' % filepath_frodock
     frodock_model = '%s/cluster/cluster_5_3_model_process' % filepath_frodock
-    frodock_list = extract_frodock_result(frodock_voromqa, frodock_cluster, frodock_model)
+    frodock_list = pre.extract_frodock_result(frodock_voromqa, frodock_cluster, frodock_model)
     os.system('cp %s/{rec_lig_*.sdf,rec_lig.sdf,target_lig.sdf,protac.smi} .' % (filepath_frodock))
     molfile_to_params('LG1', 'rec_lig', 'rec_lig_H.sdf') #generate the parameters of rec_lig for rosetta
     pre.alter_chain('rec_lig.pdb', 'rec_lig_Y.pdb', 'Y')
@@ -160,6 +160,8 @@ def rosetta(cpu, lig_locate_num):
                          (filepath_frodock_cluster, model_pdb_id, filepath_cluster, score_rank))
            pre.obabel_convert_format('mol2', '%s/protac_%s.mol2' % (filepath_cluster, score_rank),
                                      'pdb', '%s/protac_%s.pdb' % (filepath_cluster, score_rank))
+           pre.alter_chain('%s/protac_%s.pdb' % (filepath_cluster, score_rank),
+                           '%s/protac_%s.pdb' % (filepath_cluster, score_rank), 'X')
            os.system('cat %s/model.%s.pdb %s/protac_%s.pdb > %s/model_merge_%s.pdb' %
                      (filepath_cluster, score_rank, filepath_cluster, score_rank, filepath_cluster, score_rank))
        else:
@@ -172,6 +174,8 @@ def rosetta(cpu, lig_locate_num):
                os.system('cp %s %s/protac_%s_1.mol2' % (protac_best_mol2_1, filepath_cluster, score_rank))
                pre.obabel_convert_format('mol2', '%s/protac_%s_1.mol2' % (filepath_cluster, score_rank),
                                          'pdb', '%s/protac_%s_1.pdb' % (filepath_cluster, score_rank))
+               pre.alter_chain('%s/protac_%s_1.pdb' % (filepath_cluster, score_rank),
+                               '%s/protac_%s_1.pdb' % (filepath_cluster, score_rank), 'X')
                os.system('cat %s/protac_%s_1.pdb >> %s/model_merge_%s.pdb' %
                          (filepath_cluster, score_rank, filepath_cluster, score_rank))
                flag = 1
@@ -181,6 +185,8 @@ def rosetta(cpu, lig_locate_num):
                os.system('cp %s %s/protac_%s_2.mol2' % (protac_best_mol2_2, filepath_cluster, score_rank))
                pre.obabel_convert_format('mol2', '%s/protac_%s_2.mol2' % (filepath_cluster, score_rank),
                                          'pdb', '%s/protac_%s_2.pdb' % (filepath_cluster, score_rank))
+               pre.alter_chain('%s/protac_%s_2.pdb' % (filepath_cluster, score_rank),
+                               '%s/protac_%s_2.pdb' % (filepath_cluster, score_rank), 'Y')
                os.system('cat %s/protac_%s_2.pdb >> %s/model_merge_%s.pdb' %
                          (filepath_cluster, score_rank, filepath_cluster, score_rank))
                flag = 1
@@ -331,41 +337,6 @@ def molfile_to_params(res_name, para_name, sdf_name):
     os.system(ROSETTA + '/main/source/scripts/python/public/molfile_to_params.py -n %s -p %s '
                         '--conformers-in-one-file %s --clobber' % (res_name, para_name, sdf_name))
 
-#extract the frodock results for rosetta
-def extract_frodock_result(voromqa_input, cluster_input, model_input):
-    with open(voromqa_input, 'rb') as voromqa_input_file:
-        voromqa_lines = voromqa_input_file.read().splitlines()
-    with open(cluster_input, 'rb') as cluster_input_file:
-        cluster_lines = cluster_input_file.read().splitlines()
-    cluster_list = []
-    content_list = []
-    model_list = []
-    for cluster_line in cluster_lines:
-        cluster_list.append(cluster_line)
-    cluster_num = len(cluster_list)
-    for voromqa_line in voromqa_lines:
-        items = voromqa_line.split()
-        rank = items[0]
-        model_num = items[1].split('.')[1]
-        if rank in cluster_list:
-            content_list.append('%s %s' % (rank, model_num))
-    # For cluster less than 15，extract the models from the conformations which has not been clusterd
-    if cluster_num < 15:
-        with open(model_input, 'rb') as model_input_file:
-            model_lines = model_input_file.read().splitlines()
-        for model_line in model_lines:
-            model_items = model_line.split()
-            for i in range(3,len(model_items)):
-                model_list.append(model_items[i])
-        for voromqa_line in voromqa_lines:
-            items = voromqa_line.split()
-            rank = items[0]
-            model_num = items[1].split('.')[1]
-            if rank not in model_list and cluster_num < 15:
-                content_list.append('%s %s' % (rank, model_num))
-                cluster_num += 1
-    return content_list
-
 #generate docking parametes for rosetta
 def generate_rosetta_para(file_out):
     content = '-in:file:extra_res_fa rec_lig.params\n'
@@ -433,7 +404,7 @@ class Filtering_queue:
                 if self.lig_locate_num == 1:
                     target_lig_pdb = 'target_lig.%s.pdb' % pdb_num
                     target_lig_sdf = 'target_lig.%s.sdf' % pdb_num
-                    os.system('awk \'{if($1=="HETATM") print $0}\' model.%s.pdb > %s' % (pdb_num, target_lig_pdb))
+                    os.system('grep HETATM model.%s.pdb > %s' % (pdb_num, target_lig_pdb))
                     pre.obabel_convert_format('pdb', target_lig_pdb, 'sdf', target_lig_sdf)
                     protac_sdf = 'protac_%s.sdf' % pdb_num
                     num_confor = pre.getConformers('rec_lig.sdf', 'target_lig.sdf', 'protac.smi',
@@ -455,7 +426,8 @@ class Filtering_queue:
                 else:
                     target_lig_pdb = 'target_lig.%s.pdb' % pdb_num
                     target_lig_sdf = 'target_lig.%s.sdf' % pdb_num
-                    os.system('awk \'{if($1=="HETATM" && $5=="X") print $0}\' model.%s.pdb > %s' % (pdb_num, target_lig_pdb))
+                    os.system('awk \'{if(substr($0,1,6)=="HETATM" && substr($0,22,1)=="X") '
+                              'print $0}\' model.%s.pdb > %s' % (pdb_num, target_lig_pdb))
                     target_lig_pdb_1 = '%s/%s' % (self.filepath_rec_lig_1, target_lig_pdb)
                     target_lig_sdf_1 = '%s/%s' % (self.filepath_rec_lig_1, target_lig_sdf)
                     os.system('cat %s rec_lig_1.pdb > %s'

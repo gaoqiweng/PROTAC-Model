@@ -166,6 +166,8 @@ def filter_frodock(cpu, lig_locate_num):
             os.system('cp %s %s/protac_%s.mol2' % (protac_best_mol2, filepath_cluster, score_rank))
             pre.obabel_convert_format('mol2', '%s/protac_%s.mol2' % (filepath_cluster, score_rank),
                                       'pdb', '%s/protac_%s.pdb' % (filepath_cluster, score_rank))
+            pre.alter_chain('%s/protac_%s.pdb' % (filepath_cluster, score_rank),
+                            '%s/protac_%s.pdb' % (filepath_cluster, score_rank), 'X')
             os.system('cat %s/model.%s.pdb %s/protac_%s.pdb > %s/model_merge_%s.pdb' %
                       (filepath_cluster, score_rank, filepath_cluster, score_rank, filepath_cluster, score_rank))
         else:
@@ -177,6 +179,8 @@ def filter_frodock(cpu, lig_locate_num):
                 os.system('cp %s %s/protac_%s_1.mol2' % (protac_best_mol2_1, filepath_cluster, score_rank))
                 pre.obabel_convert_format('mol2', '%s/protac_%s_1.mol2' % (filepath_cluster, score_rank),
                                           'pdb', '%s/protac_%s_1.pdb' % (filepath_cluster, score_rank))
+                pre.alter_chain('%s/protac_%s_1.pdb' % (filepath_cluster, score_rank),
+                                '%s/protac_%s_1.pdb' % (filepath_cluster, score_rank), 'X')
                 os.system('cat %s/protac_%s_1.pdb >> %s/model_merge_%s.pdb' %
                           (filepath_cluster, score_rank, filepath_cluster, score_rank))
             if vina_dict_2.has_key(model_nolig_pdb_id):
@@ -185,6 +189,8 @@ def filter_frodock(cpu, lig_locate_num):
                 os.system('cp %s %s/protac_%s_2.mol2' % (protac_best_mol2_2, filepath_cluster, score_rank))
                 pre.obabel_convert_format('mol2', '%s/protac_%s_2.mol2' % (filepath_cluster, score_rank),
                                           'pdb', '%s/protac_%s_2.pdb' % (filepath_cluster, score_rank))
+                pre.alter_chain('%s/protac_%s_2.pdb' % (filepath_cluster, score_rank),
+                                '%s/protac_%s_2.pdb' % (filepath_cluster, score_rank), 'Y')
                 os.system('cat %s/protac_%s_2.pdb >> %s/model_merge_%s.pdb' %
                           (filepath_cluster, score_rank, filepath_cluster, score_rank))
 
