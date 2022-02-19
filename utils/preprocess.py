@@ -375,6 +375,8 @@ def getConformers(file_rec_lig_sdf, file_warhead_sdf, protac_smi, file_docked, f
         docked_warhead = docked_head.GetSubstructMatch(warhead)
         protac_e3 = protac.GetSubstructMatch(e3_ligand)
         protac_warhead = protac.GetSubstructMatch(warhead)
+        if len(docked_warhead) == 0 or len(docked_e3) == 0 or len(protac_e3) == 0 or len(protac_warhead) == 0:
+            print "The smiles of PROTAC doesn't match the structures of ligands of target or receptor proteins."
         #print docked_e3
         #print docked_warhead
         #print protac_e3
@@ -403,3 +405,38 @@ def getConformers(file_rec_lig_sdf, file_warhead_sdf, protac_smi, file_docked, f
         return len(rmsList)
     except:
         return len(rmsList)
+
+#extract the frodock results for rosetta
+def extract_frodock_result(voromqa_input, cluster_input, model_input):
+    with open(voromqa_input, 'rb') as voromqa_input_file:
+        voromqa_lines = voromqa_input_file.read().splitlines()
+    with open(cluster_input, 'rb') as cluster_input_file:
+        cluster_lines = cluster_input_file.read().splitlines()
+    cluster_list = []
+    content_list = []
+    model_list = []
+    for cluster_line in cluster_lines:
+        cluster_list.append(cluster_line)
+    cluster_num = len(cluster_list)
+    for voromqa_line in voromqa_lines:
+        items = voromqa_line.split()
+        rank = items[0]
+        model_num = items[1].split('.')[1]
+        if rank in cluster_list:
+            content_list.append('%s %s' % (rank, model_num))
+    # For cluster less than 15，extract the models from the conformations which has not been clusterd
+    if cluster_num < 15:
+        with open(model_input, 'rb') as model_input_file:
+            model_lines = model_input_file.read().splitlines()
+        for model_line in model_lines:
+            model_items = model_line.split()
+            for i in range(3,len(model_items)):
+                model_list.append(model_items[i])
+        for voromqa_line in voromqa_lines:
+            items = voromqa_line.split()
+            rank = items[0]
+            model_num = items[1].split('.')[1]
+            if rank not in model_list and cluster_num < 15:
+                content_list.append('%s %s' % (rank, model_num))
+                cluster_num += 1
+    return content_list
