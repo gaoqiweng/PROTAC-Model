@@ -1,3 +1,7 @@
+Update:
+1. Improve the efficiency of parallel computing.
+2. In the generation of the PROTAC conformations, rdkit sometimes can't recognize the bond assignment of the ligand correctly from the pdb files, which might cause some errors. To avoid this error, you can provide the smiles file of the ligand in the PDB.
+
 Installation requirements for PROTAC-MODEL:
 
 1. Python 2.7
@@ -50,6 +54,10 @@ optional arguments:
                         Use the RosettaDock-based refinement to improve the
                         prediction performance. But it will cost much more
                         time.
+  -itsmi <string>, --input-target-smi <string>
+                        Smiles file of target ligand in target protein.
+  -irsmi <string>, --input-receptor-smi <string>
+                        Smiles file of receptor ligand in receptor protein.                        
 
 Tutorials:
 

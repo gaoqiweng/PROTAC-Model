@@ -207,12 +207,14 @@ def extract_top3_cluster(cluster_input, top1_intput, result_input, file_output):
         top1_list.append(int(top1_line))
     cluster_dict = {}
     all_top3_list = []
+    all_cluster_list = []
     for cluster_line in cluster_lines:
         cluster_items = cluster_line.split()
         # get the number of model
         cluster_list = []
         for i in range(3,len(cluster_items)):
             cluster_list.append(int(cluster_items[i]))
+            all_cluster_list.append(int(cluster_items[i]))
         # get the best model from cluster
         cluster_list.sort()
         if cluster_list[0] in top1_list:
@@ -226,6 +228,15 @@ def extract_top3_cluster(cluster_input, top1_intput, result_input, file_output):
         number = int(result_line.split()[0])
         if number in all_top3_list:
             content += '%s %s\n' % (result_line, cluster_dict[number])
+    # For cluster less than 15，extract the models from the conformations which has not been clusterd
+    if len(all_top3_list) < 45:
+        cluster_num = len(all_top3_list) / 3
+        for result_line in result_lines:
+            number = int(result_line.split()[0])
+            if number not in all_cluster_list and cluster_num < 15:
+                content += '%s %s\n' % (result_line, number)
+                cluster_num += 1
+
     with open(file_output, 'wb') as cluster_file_output:
         cluster_file_output.write(content)
 
@@ -267,6 +278,15 @@ def obabel_convert_format(iformat, file_input, oformat, file_out, addH = False):
         os.system(ADFRSUITE + '/bin/obabel -h -i%s %s -o%s -O %s' % (iformat, file_input, oformat, file_out))
     else:
         os.system(ADFRSUITE + '/bin/obabel -i%s %s -o%s -O %s' % (iformat, file_input, oformat, file_out))
+
+#Assign bond order for ligands in pdb file according to the smiles.
+#Ligands in pdb file usually meets wrong bond orders.
+def pdb_AssignBondOrder(file_input_pdb, file_smi, file_out):
+    ref_smi = Chem.MolFromSmiles(file_smi)
+    pdb = Chem.MolFromPDBFile(file_input_pdb)
+    pdb = AllChem.AssignBondOrdersFromTemplate(ref_smi, pdb)
+    writer = Chem.SDWriter(file_out)
+    writer.write(pdb)
 
 #get the small molecule from PDB file
 def preprocess_pdb_element(file_input_pdb, file_output_pdb):
@@ -359,43 +379,55 @@ def filter_interface_residue(input_info):
     return content
 
 #get the PROTAC conformations
-def getConformers(file_rec_lig_sdf, file_warhead_sdf, protac_smi, file_docked, file_out):
+def getConformers(file_rec_lig_sdf, file_target_sdf, protac_smi, file_docked,
+                  file_out, target_smi='none', rec_smi='none'):
     rmsList = []
     #rdkit might meet some errors for some ligands
     try:
-        e3_ligand = Chem.SDMolSupplier(file_rec_lig_sdf)[0]
-        warhead = Chem.SDMolSupplier(file_warhead_sdf)[0]
-        docked_head = Chem.SDMolSupplier(file_docked)[0]
+        rec_ligand = Chem.SDMolSupplier(file_rec_lig_sdf)[0]
+        target = Chem.SDMolSupplier(file_target_sdf)[0]
+        if rec_smi !='none':
+            rec_smi = rec_smi
+        else:
+            rec_smi = Chem.MolToSmiles(rec_ligand)
+        if target_smi != 'none':
+            target_smi = target_smi
+        else:
+            target_smi = Chem.MolToSmiles(target)
+        ref_docked = Chem.MolFromSmiles('%s.%s' % (rec_smi, target_smi))
+        docked_head = Chem.MolFromPDBFile(file_docked)
+        docked_head = AllChem.AssignBondOrdersFromTemplate(ref_docked,
+                                                           docked_head)
         with open(protac_smi,'rb') as protac_smi_input:
             protac_smi = protac_smi_input.read().splitlines()[0]
         protac = Chem.MolFromSmiles(protac_smi)
         Chem.AddHs(protac)
         Chem.AddHs(docked_head)
-        docked_e3 = docked_head.GetSubstructMatch(e3_ligand)
-        docked_warhead = docked_head.GetSubstructMatch(warhead)
-        protac_e3 = protac.GetSubstructMatch(e3_ligand)
-        protac_warhead = protac.GetSubstructMatch(warhead)
-        if len(docked_warhead) == 0 or len(docked_e3) == 0 or len(protac_e3) == 0 or len(protac_warhead) == 0:
+        docked_rec = docked_head.GetSubstructMatch(rec_ligand)
+        docked_target = docked_head.GetSubstructMatch(target)
+        protac_rec = protac.GetSubstructMatch(rec_ligand)
+        protac_target = protac.GetSubstructMatch(target)
+        if len(docked_target) == 0 or len(docked_rec) == 0 or len(protac_rec) == 0 or len(protac_target) == 0:
             print "The smiles of PROTAC doesn't match the structures of ligands of target or receptor proteins."
-        #print docked_e3
-        #print docked_warhead
-        #print protac_e3
-        #print protac_warhead
-        protac_align_id = list(protac_e3)+list(protac_warhead)
-        docked_align_id = list(docked_e3)+list(docked_warhead)
-        if not (len(docked_e3) == 0 or len(docked_warhead) == 0):
-            cmap = {protac_e3[j]: docked_head.GetConformer().GetAtomPosition(docked_e3[j]) for j in range(len(docked_e3))}
-            cmap.update({protac_warhead[j]: docked_head.GetConformer().GetAtomPosition(docked_warhead[j]) for j in range(len(docked_warhead))})
+        #print docked_rec
+        #print docked_target
+        #print protac_rec
+        #print protac_target
+        protac_align_id = list(protac_rec)+list(protac_target)
+        docked_align_id = list(docked_rec)+list(docked_target)
+        if not (len(docked_rec) == 0 or len(docked_target) == 0):
+            cmap = {protac_rec[j]: docked_head.GetConformer().GetAtomPosition(docked_rec[j]) for j in range(len(docked_rec))}
+            cmap.update({protac_target[j]: docked_head.GetConformer().GetAtomPosition(docked_target[j]) for j in range(len(docked_target))})
             cids = AllChem.EmbedMultipleConfs(protac, numConfs=100, coordMap=cmap, maxAttempts=1000, numThreads=1)
             if len(cids) > 0:
                 writer = Chem.SDWriter(file_out)
                 for i in range(len(cids)):
                     rms = rdMolAlign.AlignMol(protac, docked_head, prbCid=i,atomMap=zip(protac_align_id,docked_align_id))
-                    #rms_e3 = rdMolAlign.AlignMol(protac, docked_e3, prbCid=i,atomMap=zip(list(protac_e3),list(docked_e3)))
-                    #rms_warhead = rdMolAlign.AlignMol(protac, docked_warhead, prbCid=i,atomMap=zip(list(protac_warhead),list(docked_warhead)))
+                    #rms_rec = rdMolAlign.AlignMol(protac, docked_rec, prbCid=i,atomMap=zip(list(protac_rec),list(docked_rec)))
+                    #rms_target = rdMolAlign.AlignMol(protac, docked_target, prbCid=i,atomMap=zip(list(protac_target),list(docked_target)))
                     #print rms
                     if rms < 0.5:
-                    #if rms_e3 < 0.5 and rms_warhead < 0.5:
+                    #if rms_rec < 0.5 and rms_target < 0.5:
                         rmsList.append(rms)
                         writer.write(protac, confId=i)
                     #rmsList.append(rms)

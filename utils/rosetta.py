@@ -3,14 +3,13 @@
 
 import os, sys
 import utils.preprocess as pre
-from threading import Thread
-from Queue import Queue
+from multiprocessing import Pool
 
 ROSETTA = os.environ["ROSETTA"]
 ADFRSUITE = os.environ['ADFRSUITE']
 
 #run FRODOCK
-def rosetta(cpu, lig_locate_num):
+def rosetta(cpu, lig_locate_num, target_smi, rec_smi):
     print ('ROSETTA docking')
     #working directory is in filepath_rosetta
 
@@ -31,7 +30,7 @@ def rosetta(cpu, lig_locate_num):
     target_id = ''.join(target_id_list) + 'X'
     rosetta_partner = rec_id + '_' + target_id
     file_docking_flags = 'docking.flags'
-    generate_rosetta_para(file_docking_flags)
+    generate_rosetta_para(file_docking_flags, cpu)
     rosetta_mpi_icc = "%s/main/source/bin/docking_protocol.mpi.linuxiccrelease" % ROSETTA
     rosetta_mpi_gcc = "%s/main/source/bin/docking_protocol.mpi.linuxgccrelease" % ROSETTA
     rosetta_icc = "%s/main/source/bin/docking_protocol.linuxiccrelease" % ROSETTA
@@ -55,7 +54,14 @@ def rosetta(cpu, lig_locate_num):
         old_rank = frodock_list[j].split()[1]
         pre.preprocess_pdb_element('%s/target_%s_addH.pdb'% (filepath_frodock, old_rank),
                                    'target_lig_pre.%s.pdb' % (new_rank))
-        pre.obabel_convert_format('pdb', 'target_lig_pre.%s.pdb' % (new_rank),
+        if target_smi != 'none':
+            pre.pdb_AssignBondOrder('target_lig_pre.%s.pdb' % (new_rank), target_smi,
+                                    'target_lig.%s.sdf' % (new_rank))
+            pre.obabel_convert_format('sdf','target_lig.%s.sdf' % (new_rank),
+                                      'sdf','target_lig_pre.%s.sdf' % (new_rank),
+                                      addH=True)
+        else:
+            pre.obabel_convert_format('pdb', 'target_lig_pre.%s.pdb' % (new_rank),
                                   'sdf', 'target_lig_pre.%s.sdf' % (new_rank), addH=True)
         molfile_to_params('LG2', 'lig.%s' % new_rank, 'target_lig_pre.%s.sdf' % (new_rank))
         os.system('cp %s/cluster/model.%s.pdb .' % (filepath_frodock, new_rank))
@@ -64,6 +70,7 @@ def rosetta(cpu, lig_locate_num):
         #rosetta docking
         if flag_mpi == 1:
             os.system('mpirun -np %s %s @%s -s model.%s.pdb '
+                      #'-extra_res_fa lig.%s.params -partners %s -out:file:scorefile model_%s.sc'
                       '-extra_res_fa lig.%s.params -partners %s -out:file:scorefile model_%s.sc >/dev/null 2>&1'
                       % (cpu, rosetta_docking, file_docking_flags, new_rank, new_rank, rosetta_partner, new_rank))
         elif flag_mpi == 0:
@@ -99,8 +106,15 @@ def rosetta(cpu, lig_locate_num):
             os.system('rm %s/*' % filepath_vina)
 
     #Run interface_residue, obenergy, vina, voromqa
-    filtering(cpu, rec_site, rec_id_list, lig_site, target_id_list, rosetta_list_lines, filepath_vina,
-              filepath_rec_lig_1, filepath_rec_lig_2, lig_locate_num)
+    para_list = []
+    for line in rosetta_list_lines:
+        para_list.append([rec_site, rec_id_list, lig_site, target_id_list,
+              line, filepath_vina, filepath_rec_lig_1,
+              filepath_rec_lig_2, lig_locate_num, target_smi, rec_smi])
+    pool = Pool(cpu)
+    pool.map(filtering, para_list)
+    pool.close()
+    pool.join()
 
     #preprocess for clustering
     results_voromqa_rosetta = 'results_voromqa'
@@ -336,11 +350,23 @@ def interface_rosetta(rec_site, lig_site, pdb, rec_chain_list, lig_chain_list):
 def molfile_to_params(res_name, para_name, sdf_name):
     os.system(ROSETTA + '/main/source/scripts/python/public/molfile_to_params.py -n %s -p %s '
                         '--conformers-in-one-file %s --clobber' % (res_name, para_name, sdf_name))
+    with open('%s.params' % para_name, 'r') as file_in:
+        para_lines = file_in.readlines()
+    content = ''
+    for para_line in para_lines:
+        if para_line[:12] != 'PDB_ROTAMERS':
+            content += para_line
+    with open('%s.params' % para_name, 'w') as file_out:
+        file_out.write(content)
 
 #generate docking parametes for rosetta
-def generate_rosetta_para(file_out):
+def generate_rosetta_para(file_out, cpu):
+    # when use multicores in rosetta, the generated conformastions number will decrease.
+    # The decreased number in our clusters = int(cpu) - 2
+    if int(cpu) > 10:
+        gen_conf_num = 400 + int(cpu) - 2
     content = '-in:file:extra_res_fa rec_lig.params\n'
-    content += '-nstruct 400\n'
+    content += '-nstruct %s\n' % gen_conf_num
     content += '-use_input_sc\n'
     content += '-load_PDB_components false\n'
     content += '-dock_pert 3 8\n'
@@ -353,120 +379,108 @@ def generate_rosetta_para(file_out):
         file.write(content)
 
 #Run addH, interface_residue, obenergy, vina, voromqa in multithreading
-def filtering(cpu, rec_site, rec_id_list, lig_site, target_id_list, rosetta_list_lines, filepath_vina,
-              filepath_rec_lig_1, filepath_rec_lig_2, lig_locate_num):
-    filtering_queue = Filtering_queue(rec_site, rec_id_list, lig_site, target_id_list, rosetta_list_lines,
-                                      filepath_vina, filepath_rec_lig_1, filepath_rec_lig_2, lig_locate_num)
-    queue = Queue(maxsize=int(cpu*2))
-    producer_thread = Thread(target=filtering_queue.producer, args=(queue,))
-    producer_thread.daemon = True
-    producer_thread.start()
+def filtering(para_list):
+    rec_site = para_list[0]
+    rec_id_list = para_list[1]
+    lig_site = para_list[2]
+    target_id_list = para_list[3]
+    pdb = para_list[4]
+    filepath_vina = para_list[5]
+    filepath_rec_lig_1 = para_list[6]
+    filepath_rec_lig_2 = para_list[7]
+    lig_locate_num = para_list[8]
+    target_smi = para_list[9]
+    rec_smi = para_list[10]
+    filepath_vina_1 = '%s/vina' % filepath_rec_lig_1
+    filepath_vina_2 = '%s/vina' % filepath_rec_lig_2
+    # get the interface residue
+    content_interface = interface_rosetta(rec_site, lig_site,
+                                          pdb, rec_id_list,
+                                          target_id_list)
+    filter_num = pre.filter_interface_residue(content_interface)
 
-    for index in range(int(cpu)):
-        consumer_thread = Thread(target=filtering_queue.consumer, args=(queue,))
-        consumer_thread.daemon = True
-        consumer_thread.start()
-    queue.join()
+    # get the PROTAC conformations
+    if filter_num != 'none':
+        pdb_num = filter_num.split('.')[1]
+        # The ligand with only one location for linker
+        if lig_locate_num == 1:
+            target_lig_pdb = 'target_lig.%s.pdb' % pdb_num
+            os.system(
+                'grep HETATM model.%s.pdb > %s' % (pdb_num, target_lig_pdb))
+            protac_sdf = 'protac_%s.sdf' % pdb_num
+            num_confor = pre.getConformers('rec_lig.sdf', 'target_lig.sdf',
+                                           'protac.smi', target_lig_pdb,
+                                           protac_sdf, target_smi,
+                                           rec_smi)
+            # Vina and obenergy
+            if int(num_confor) > 0:
+                # preprocess files for obenergy and vina
+                protac_mol2 = 'protac_%s.mol2' % (pdb_num)
+                pre.obabel_convert_format('sdf', protac_sdf, 'mol2',
+                                          protac_mol2)
+                model_nolig_pdb = 'model_nolig.%s.pdb' % (pdb_num)
+                model_pdb = 'model.%s.pdb' % pdb_num
+                os.system('grep ATOM %s > %s' % (model_pdb, model_nolig_pdb))
+                # obenergy and vina
+                num_obenergy_vina = pre.obenergy_vina(pdb_num,
+                                                      filepath_vina, '.')
+                # voromqa
+                if int(num_obenergy_vina) > 0:
+                    pre.voromqa(model_nolig_pdb)
+        # The ligand with two possible location for linker
+        else:
+            target_lig_pdb = 'target_lig.%s.pdb' % pdb_num
+            os.system(
+                'awk \'{if(substr($0,1,6)=="HETATM" && substr($0,22,1)=="X") '
+                'print $0}\' model.%s.pdb > %s' % (pdb_num, target_lig_pdb))
+            target_lig_pdb_1 = '%s/%s' % (
+            filepath_rec_lig_1, target_lig_pdb)
+            os.system('cat %s rec_lig_1.pdb > %s'
+                      % (target_lig_pdb, target_lig_pdb_1))
+            protac_sdf_1 = '%s/protac_%s.sdf' % (
+            filepath_rec_lig_1, pdb_num)
+            num_confor_1 = pre.getConformers('rec_lig_1.sdf', 'target_lig.sdf',
+                                             'protac.smi', target_lig_pdb_1,
+                                             protac_sdf_1, target_smi)
+            num_obenergy_vina_1 = 0
+            num_obenergy_vina_2 = 0
+            model_nolig_pdb = 'model_nolig.%s.pdb' % (pdb_num)
+            if int(num_confor_1) > 0:
+                # preprocess files for obenergy and vina
+                protac_mol2_1 = '%s/protac_%s.mol2' % (
+                filepath_rec_lig_1, pdb_num)
+                pre.obabel_convert_format('sdf', protac_sdf_1, 'mol2',
+                                          protac_mol2_1)
+                model_pdb = 'model.%s.pdb' % pdb_num
+                os.system('grep ATOM %s > %s' % (model_pdb, model_nolig_pdb))
+                # obenergy and vina
+                num_obenergy_vina_1 = pre.obenergy_vina(pdb_num,
+                                                        filepath_vina_1,
+                                                        filepath_rec_lig_1)
 
-#The queue class for addH, interface_residue, obenergy, vina, voromqa
-class Filtering_queue:
-    def __init__(self, rec_site, rec_id_list, lig_site, target_id_list, rosetta_list_lines, filepath_vina,
-                 filepath_rec_lig_1, filepath_rec_lig_2, lig_locate_num):
-        self.rec_site = rec_site
-        self.rec_id_list = rec_id_list
-        self.lig_site = lig_site
-        self.target_id_list = target_id_list
-        self.rosetta_list_lines = rosetta_list_lines
-        self.filepath_vina = filepath_vina
-        self.lig_locate_num = lig_locate_num
-        self.filepath_rec_lig_1 = filepath_rec_lig_1
-        self.filepath_rec_lig_2 = filepath_rec_lig_2
-        self.filepath_vina_1 = '%s/vina' % filepath_rec_lig_1
-        self.filepath_vina_2 = '%s/vina' % filepath_rec_lig_2
+            target_lig_pdb_2 = '%s/%s' % (
+            filepath_rec_lig_2, target_lig_pdb)
+            os.system('cat %s rec_lig_2.pdb > %s'
+                      % (target_lig_pdb, target_lig_pdb_2))
+            protac_sdf_2 = '%s/protac_%s.sdf' % (
+            filepath_rec_lig_2, pdb_num)
+            num_confor_2 = pre.getConformers('rec_lig_2.sdf', 'target_lig.sdf',
+                                             'protac.smi', target_lig_pdb_2,
+                                             protac_sdf_2, target_smi)
+            if int(num_confor_2) > 0:
+                # preprocess files for obenergy and vina
+                protac_mol2_2 = '%s/protac_%s.mol2' % (
+                filepath_rec_lig_2, pdb_num)
+                pre.obabel_convert_format('sdf', protac_sdf_2, 'mol2',
+                                          protac_mol2_2)
+                model_pdb = 'model.%s.pdb' % pdb_num
+                os.system('grep ATOM %s > %s' % (model_pdb, model_nolig_pdb))
+                # obenergy and vina
+                num_obenergy_vina_2 = pre.obenergy_vina(pdb_num,
+                                                        filepath_vina_2,
+                                                        filepath_rec_lig_2)
+            # voromqa
+            if int(num_obenergy_vina_1) > 0 or int(num_obenergy_vina_2) > 0:
+                pre.voromqa(model_nolig_pdb)
 
-    def producer(self,in_q):
-        while in_q.full() is False:
-            for line in self.rosetta_list_lines:
-                in_q.put(line)
-
-    def consumer(self, in_q):
-        while in_q.empty() is not True:
-            pdb = in_q.get()
-            #get the interface residue
-            content_interface = interface_rosetta(self.rec_site, self.lig_site, 
-                                                  pdb, self.rec_id_list, self.target_id_list)
-            filter_num = pre.filter_interface_residue(content_interface)
-
-            #get the PROTAC conformations
-            if filter_num != 'none':
-                pdb_num = filter_num.split('.')[1]
-                # The ligand with only one location for linker
-                if self.lig_locate_num == 1:
-                    target_lig_pdb = 'target_lig.%s.pdb' % pdb_num
-                    target_lig_sdf = 'target_lig.%s.sdf' % pdb_num
-                    os.system('grep HETATM model.%s.pdb > %s' % (pdb_num, target_lig_pdb))
-                    pre.obabel_convert_format('pdb', target_lig_pdb, 'sdf', target_lig_sdf)
-                    protac_sdf = 'protac_%s.sdf' % pdb_num
-                    num_confor = pre.getConformers('rec_lig.sdf', 'target_lig.sdf', 'protac.smi',
-                                                   target_lig_sdf, protac_sdf)
-                    #Vina and obenergy
-                    if int(num_confor) > 0 :
-                        #preprocess files for obenergy and vina
-                        protac_mol2 = 'protac_%s.mol2' % (pdb_num)
-                        pre.obabel_convert_format('sdf', protac_sdf, 'mol2', protac_mol2)
-                        model_nolig_pdb = 'model_nolig.%s.pdb' % (pdb_num)
-                        model_pdb = 'model.%s.pdb' % pdb_num
-                        os.system('grep ATOM %s > %s' % (model_pdb, model_nolig_pdb))
-                        #obenergy and vina
-                        num_obenergy_vina = pre.obenergy_vina(pdb_num, self.filepath_vina, '.')
-                        #voromqa
-                        if int(num_obenergy_vina) > 0:
-                            pre.voromqa(model_nolig_pdb)
-                #The ligand with two possible location for linker
-                else:
-                    target_lig_pdb = 'target_lig.%s.pdb' % pdb_num
-                    target_lig_sdf = 'target_lig.%s.sdf' % pdb_num
-                    os.system('awk \'{if(substr($0,1,6)=="HETATM" && substr($0,22,1)=="X") '
-                              'print $0}\' model.%s.pdb > %s' % (pdb_num, target_lig_pdb))
-                    target_lig_pdb_1 = '%s/%s' % (self.filepath_rec_lig_1, target_lig_pdb)
-                    target_lig_sdf_1 = '%s/%s' % (self.filepath_rec_lig_1, target_lig_sdf)
-                    os.system('cat %s rec_lig_1.pdb > %s'
-                              % (target_lig_pdb, target_lig_pdb_1))
-                    pre.obabel_convert_format('pdb', target_lig_pdb_1, 'sdf', target_lig_sdf_1)
-                    protac_sdf_1 = '%s/protac_%s.sdf' % (self.filepath_rec_lig_1, pdb_num)
-                    num_confor_1 = pre.getConformers('rec_lig_1.sdf', 'target_lig.sdf', 'protac.smi',
-                                                     target_lig_sdf_1, protac_sdf_1)
-                    num_obenergy_vina_1 = 0
-                    num_obenergy_vina_2 = 0
-                    model_nolig_pdb = 'model_nolig.%s.pdb' % (pdb_num)
-                    if int(num_confor_1) > 0 :
-                        #preprocess files for obenergy and vina
-                        protac_mol2_1 = '%s/protac_%s.mol2' % (self.filepath_rec_lig_1, pdb_num)
-                        pre.obabel_convert_format('sdf', protac_sdf_1, 'mol2', protac_mol2_1)
-                        model_pdb = 'model.%s.pdb' % pdb_num
-                        os.system('grep ATOM %s > %s' % (model_pdb, model_nolig_pdb))
-                        #obenergy and vina
-                        num_obenergy_vina_1 = pre.obenergy_vina(pdb_num, self.filepath_vina_1, self.filepath_rec_lig_1)
-
-                    target_lig_pdb_2 = '%s/%s' % (self.filepath_rec_lig_2, target_lig_pdb)
-                    target_lig_sdf_2 = '%s/%s' % (self.filepath_rec_lig_2, target_lig_sdf)
-                    os.system('cat %s rec_lig_2.pdb > %s'
-                              % (target_lig_pdb, target_lig_pdb_2))
-                    pre.obabel_convert_format('pdb', target_lig_pdb_2, 'sdf', target_lig_sdf_2)
-                    protac_sdf_2 = '%s/protac_%s.sdf' % (self.filepath_rec_lig_2, pdb_num)
-                    num_confor_2 = pre.getConformers('rec_lig_2.sdf', 'target_lig.sdf', 'protac.smi',
-                                                     target_lig_sdf_2, protac_sdf_2)
-                    if int(num_confor_2) > 0 :
-                        #preprocess files for obenergy and vina
-                        protac_mol2_2 = '%s/protac_%s.mol2' % (self.filepath_rec_lig_2, pdb_num)
-                        pre.obabel_convert_format('sdf', protac_sdf_2, 'mol2', protac_mol2_2)
-                        model_pdb = 'model.%s.pdb' % pdb_num
-                        os.system('grep ATOM %s > %s' % (model_pdb, model_nolig_pdb))
-                        #obenergy and vina
-                        num_obenergy_vina_2 = pre.obenergy_vina(pdb_num, self.filepath_vina_2, self.filepath_rec_lig_2)
-                    # voromqa
-                    if int(num_obenergy_vina_1) > 0 or int(num_obenergy_vina_2) > 0:
-                        pre.voromqa(model_nolig_pdb)
-
-            in_q.task_done()
 
