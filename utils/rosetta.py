@@ -227,7 +227,7 @@ def rosetta(cpu, lig_locate_num, target_smi, rec_smi):
     cp_cluster='cp %s/cluster_5_3_model_process %s/cluster_all' % (filepath_cluster, filepath_rosetta_results)
     os.system(cp_cluster)
     with open('%s/%s' % (filepath_rosetta_results, cluster_top3), 'rb') as file:
-       cluster_lines = file.read().splitlines()
+       cluster_lines = file.read().splitlines()[1:]
     for cluster_line in cluster_lines:
        rank = cluster_line.split()[0]
        cluster_num = cluster_line.split()[-1]

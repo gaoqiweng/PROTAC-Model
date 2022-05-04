@@ -223,7 +223,7 @@ def extract_top3_cluster(cluster_input, top1_intput, result_input, file_output):
                 all_top3_list.append(cluster_list[j])
     with open(result_input, 'rb') as result_file:
         result_lines = result_file.read().splitlines()
-    content = ''
+    content = 'Rank Interface energy Best rank from the same cluster\n'
     for result_line in result_lines:
         number = int(result_line.split()[0])
         if number in all_top3_list:

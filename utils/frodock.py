@@ -225,13 +225,13 @@ def filter_frodock(cpu, lig_locate_num, target_smi, rec_smi):
     cp_cluster='cp %s/cluster_5_3_model_process %s/cluster_all' % (filepath_cluster, filepath_frodock_results)
     os.system(cp_cluster)
     with open('%s/%s' % (filepath_frodock_results, cluster_top3), 'rb') as file:
-        cluster_lines = file.read().splitlines()
+        cluster_lines = file.read().splitlines()[1:]
     for cluster_line in cluster_lines:
         rank = cluster_line.split()[0]
         cluster_num = cluster_line.split()[-1]
         os.system('cp %s/model_merge_%s.pdb %s/cluster_%s_%s.pdb' % (
             filepath_cluster, rank, filepath_frodock_results, cluster_num, rank))
-    filepath_frodock_results_all = '../frodock_results/all'
+    filepath_frodock_results_all = '%s/all' % filepath_frodock_results
     if os.path.exists(filepath_frodock_results_all) == False:
         os.makedirs(filepath_frodock_results_all)
     os.system('cp %s/model_merge_*.pdb %s %s' % (filepath_cluster, results_frodock, filepath_frodock_results_all))
